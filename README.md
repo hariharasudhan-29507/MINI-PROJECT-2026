@@ -40,11 +40,11 @@ The system uses Oracle 21c with the following core entities:
 
 ### ER Diagram
 
-[![ER Schema](./ER%20schema%20VRBS.png)](./ER%20schema%20VRBS.png)
+[View ER Diagram](./ER%20schema%20VRBS.png)
 
 ### Use Case Diagram
 
-[![Use Case Diagram](./USE%20CASE%20DIAGRAM%20VRBS.png)](./USE%20CASE%20DIAGRAM%20VRBS.png)
+[View Use Case Diagram](./USE%20CASE%20DIAGRAM%20VRBS.png)
 
 ## System Constraints
 
