@@ -40,11 +40,11 @@ The system uses Oracle 21c with the following core entities:
 
 ### ER Diagram
 
-![ER Schema](./ER_schema_VRBS.png)
+[![ER Schema](./ER%20schema%20VRBS.png)](./ER%20schema%20VRBS.png)
 
 ### Use Case Diagram
 
-![Use Case Diagram](./USE_CASE_DIAGRAM_VRBS.png)
+[![Use Case Diagram](./USE%20CASE%20DIAGRAM%20VRBS.png)](./USE%20CASE%20DIAGRAM%20VRBS.png)
 
 ## System Constraints
 
@@ -57,9 +57,8 @@ The system uses Oracle 21c with the following core entities:
 
 | Document | Description |
 |----------|-------------|
-| [SRS_VRBS.docx](./SRS_VRBS.docx) | Software Requirements Specification |
-| [SPECIFICATION_VRBS.pdf](./SPECIFICATION_VRBS.pdf) | ER Specification |
-| [VRBS_PPT.pptx](./VRBS_PPT.pptx) | Project Presentation |
+| [SRS VRBS.pdf](./SRS%20VRBS.pdf) | Software Requirements Specification |
+| [SPECIFICATION VRBS.pdf](./SPECIFICATION%20VRBS.pdf) | ER Specification |
 
 ## References
 
