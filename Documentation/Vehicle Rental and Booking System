@@ -1,1 +1,9 @@
+# Vehicle Rental and Booking System (VRBS)
 
+A standalone desktop application for managing vehicle rentals and cab bookings, developed as a Mini Project II (23CCS452) at Mepco Schlenk Engineering College.
+
+## Overview
+
+VRBS enables users to rent vehicles (E-Bikes, E-Cars, Normal Bikes, Cars) on an hourly basis and book cab services with automatic driver allocation. Administrators have full control over inventory, suppliers, drivers, and system reports.
+
+**Tech Stack:** Java Swing · Oracle 21c / MongoDB · JDBC (ojdbc11)
