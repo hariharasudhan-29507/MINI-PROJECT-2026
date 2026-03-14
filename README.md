@@ -75,10 +75,10 @@ Reach me: [sudanayyappan_bcs28@mepcoeng.ac.in](mailto:sudanayyappan_bcs28@mepcoe
 
 ## Team Members
 
-| Name | Status |
+| Name | mail |
 |------|--------|
-| Hariharasudhan | Author |
-| Hari Prasad V | Will be added |
+| Hariharasudhan A | sudanayyappan_bcs28@mepcoeng.ac.in|
+| Hari Prasad V | santhiselvan74_bcs28@mepcoeng.ac.in |
 | Muhammed Yousuf M | Will be added |
 
 ---
