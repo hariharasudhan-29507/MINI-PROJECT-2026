@@ -79,7 +79,7 @@ Reach me: [sudanayyappan_bcs28@mepcoeng.ac.in](mailto:sudanayyappan_bcs28@mepcoe
 |------|--------|
 | Hariharasudhan A | sudanayyappan_bcs28@mepcoeng.ac.in|
 | Hari Prasad V | santhiselvan74_bcs28@mepcoeng.ac.in |
-| Muhammed Yousuf M | Will be added |
+| Muhammed Yousuf M | bcs28@mepcoeng.ac.in |
 
 ---
 
