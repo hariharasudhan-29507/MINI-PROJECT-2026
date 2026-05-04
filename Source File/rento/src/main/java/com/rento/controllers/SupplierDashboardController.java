@@ -9,7 +9,7 @@ import com.rento.security.SessionManager;
 import com.rento.services.AuthService;
 import com.rento.services.PaymentService;
 import com.rento.services.RentalService;
-import com.rento.utils.DateTimeUtil;
+
 import com.rento.utils.AlertUtil;
 import com.rento.utils.ValidationUtil;
 import javafx.fxml.FXML;
@@ -41,6 +41,7 @@ public class SupplierDashboardController implements Initializable {
     @FXML private Label walletBalance;
     @FXML private VBox dashboardSection;
     @FXML private VBox walletSection;
+    @FXML private VBox historySection;
     @FXML private Label walletSectionBalance;
     @FXML private Label walletSectionRevenue;
     @FXML private VBox walletTransactionList;
@@ -56,6 +57,7 @@ public class SupplierDashboardController implements Initializable {
     @FXML private FlowPane vehicleFleet;
     @FXML private Label noVehiclesLabel;
     @FXML private Pagination analyticsPagination;
+    @FXML private VBox supplierHistoryList;
 
     private final RentalService rentalService = new RentalService();
     private final VehicleDAO vehicleDAO = new VehicleDAO();
@@ -73,10 +75,12 @@ public class SupplierDashboardController implements Initializable {
         welcomeLabel.setText("Welcome, " + SessionManager.getInstance().getCurrentUserName() + " (Supplier)");
         analyticsPagination.setPageCount(3);
         analyticsPagination.setPageFactory(this::createAnalyticsPage);
-        walletTopUpMethodCombo.setItems(javafx.collections.FXCollections.observableArrayList("Credit Card", "UPI"));
-        walletTopUpMethodCombo.setValue("Credit Card");
-        walletTopUpMethodCombo.valueProperty().addListener((obs, oldValue, newValue) -> updateWalletTopUpHints());
-        updateWalletTopUpHints();
+        if (walletTopUpMethodCombo != null) {
+            walletTopUpMethodCombo.setItems(javafx.collections.FXCollections.observableArrayList("Credit Card", "UPI"));
+            walletTopUpMethodCombo.setValue("Credit Card");
+            walletTopUpMethodCombo.valueProperty().addListener((obs, oldValue, newValue) -> updateWalletTopUpHints());
+            updateWalletTopUpHints();
+        }
         showDashboardSection();
         loadDashboard();
     }
@@ -112,7 +116,7 @@ public class SupplierDashboardController implements Initializable {
 
         approvalList.getChildren().clear();
         if (requested.isEmpty() && approved.isEmpty()) {
-            noApprovalsLabel.setVisible(true);
+            noApprovalsLabel.setVisible(active.isEmpty());
         } else {
             noApprovalsLabel.setVisible(false);
             // Show requested rentals first (need approval)
@@ -123,6 +127,9 @@ public class SupplierDashboardController implements Initializable {
             for (Rental r : approved) {
                 approvalList.getChildren().add(createApprovedCard(r));
             }
+        }
+        for (Rental r : active) {
+            approvalList.getChildren().add(createActiveRentalCard(r));
         }
 
         try {
@@ -139,6 +146,7 @@ public class SupplierDashboardController implements Initializable {
         } catch (Exception ignored) {}
 
         updateWalletTransactions(allSupplierRentals);
+        updateHistory(allSupplierRentals);
         analyticsPagination.setCurrentPageIndex(Math.min(analyticsPagination.getCurrentPageIndex(), 2));
         analyticsPagination.setPageFactory(this::createAnalyticsPage);
     }
@@ -257,6 +265,50 @@ public class SupplierDashboardController implements Initializable {
         return card;
     }
 
+    private HBox createActiveRentalCard(Rental rental) {
+        HBox card = new HBox(16);
+        card.getStyleClass().add("card");
+        card.setStyle("-fx-padding: 16; -fx-background-radius: 12px; -fx-border-color: #ff9f43; -fx-border-width: 2;");
+        card.setAlignment(Pos.CENTER_LEFT);
+
+        VBox info = new VBox(4);
+        HBox.setHgrow(info, Priority.ALWAYS);
+
+        Label nameLabel = new Label(rental.getVehicleName() != null ? rental.getVehicleName() : "Vehicle");
+        nameLabel.setStyle("-fx-font-weight: 700; -fx-text-fill: white; -fx-font-size: 15px;");
+
+        Label renterLabel = new Label("Customer: " + (rental.getRenterName() != null ? rental.getRenterName() : "Unknown"));
+        renterLabel.getStyleClass().add("vehicle-price");
+
+        Label depotLabel = new Label("Depot: " + (rental.getDepotLocation() != null ? rental.getDepotLocation() : "Supplier Depot")
+            + " • Plate: " + (rental.getVehicleLicensePlate() != null ? rental.getVehicleLicensePlate() : "Pending"));
+        depotLabel.getStyleClass().add("text-muted");
+
+        Label statusLabel = new Label("● " + rental.getStatus().name().replace('_', ' '));
+        statusLabel.getStyleClass().addAll("badge", rental.getStatus() == Rental.RentalStatus.OVERDUE ? "badge-danger" : "badge-warning");
+
+        info.getChildren().addAll(nameLabel, renterLabel, depotLabel, statusLabel);
+
+        VBox actions = new VBox(8);
+        Button endBtn = new Button("End Rental From Supplier");
+        endBtn.getStyleClass().add("btn-primary");
+        endBtn.setOnAction(e -> {
+            boolean ok = rentalService.markRentalReturnedBySupplier(rental.getId());
+            if (ok) {
+                AlertUtil.showSuccess(rental.isRenterMarkedComplete()
+                    ? "Rental closed successfully."
+                    : "Supplier return recorded. Waiting for renter side confirmation.");
+                loadDashboard();
+            } else {
+                AlertUtil.showError("Cannot end rental", "Only active rentals can be completed from the supplier side.");
+            }
+        });
+        actions.getChildren().add(endBtn);
+
+        card.getChildren().addAll(info, actions);
+        return card;
+    }
+
     private VBox createVehicleCard(Vehicle vehicle) {
         VBox card = new VBox(8);
         card.getStyleClass().add("card");
@@ -266,6 +318,11 @@ public class SupplierDashboardController implements Initializable {
         name.getStyleClass().add("card-title");
 
         String statusText = vehicle.getStatus() != null ? vehicle.getStatus().name().replace("_", " ") : "UNKNOWN";
+        if (vehicle.getStatus() == Vehicle.Status.IN_USE) {
+            statusText = "ON DUTY";
+        } else if (vehicle.getStatus() == Vehicle.Status.MAINTENANCE || vehicle.getStatus() == Vehicle.Status.UNDER_INSPECTION) {
+            statusText = "ON SERVICE";
+        }
         Label status = new Label("● " + statusText);
         String statusStyle = "badge-primary";
         if (vehicle.getStatus() == Vehicle.Status.AVAILABLE) statusStyle = "badge-success";
@@ -276,13 +333,26 @@ public class SupplierDashboardController implements Initializable {
         Label price = new Label("₹" + String.format("%.0f", vehicle.getDailyRate()) + "/day");
         price.getStyleClass().add("text-body");
 
-        card.getChildren().addAll(name, status, price);
+        Label depot = new Label("Depot: " + (vehicle.getBranchLocation() != null ? vehicle.getBranchLocation() : "Supplier Depot"));
+        depot.getStyleClass().add("text-muted");
+
+        HBox actions = new HBox(8);
+        Button availableBtn = new Button("Available");
+        availableBtn.getStyleClass().add("btn-secondary");
+        availableBtn.setOnAction(e -> updateVehicleStatus(vehicle, Vehicle.Status.AVAILABLE));
+        Button serviceBtn = new Button("On Service");
+        serviceBtn.getStyleClass().add("btn-danger");
+        serviceBtn.setOnAction(e -> updateVehicleStatus(vehicle, Vehicle.Status.MAINTENANCE));
+        actions.getChildren().addAll(availableBtn, serviceBtn);
+
+        card.getChildren().addAll(name, status, price, depot, actions);
         return card;
     }
 
     @FXML private void onRefresh() { loadDashboard(); }
     @FXML private void onShowDashboard() { showDashboardSection(); }
     @FXML private void onShowWallet() { showWalletSection(); }
+    @FXML public void onShowHistory() { showHistorySection(); }
     @FXML private void onAddVehicle() { NavigationManager.navigateTo("/fxml/rent.fxml"); }
     @FXML private void onNavHome() { NavigationManager.navigateTo("/fxml/landing.fxml"); }
     @FXML private void onLogout() {
@@ -292,32 +362,30 @@ public class SupplierDashboardController implements Initializable {
     }
 
     private void showDashboardSection() {
-        dashboardSection.setManaged(true);
-        dashboardSection.setVisible(true);
-        walletSection.setManaged(false);
-        walletSection.setVisible(false);
+        showOnly(dashboardSection);
     }
 
     private void showWalletSection() {
-        walletSection.setManaged(true);
-        walletSection.setVisible(true);
-        dashboardSection.setManaged(false);
-        dashboardSection.setVisible(false);
+        showOnly(walletSection);
+    }
+
+    private void showHistorySection() {
+        showOnly(historySection);
+        updateHistory(allSupplierRentalsCache);
+    }
+
+    private void showOnly(VBox section) {
+        for (VBox candidate : List.of(dashboardSection, walletSection, historySection)) {
+            if (candidate != null) {
+                boolean show = candidate == section;
+                candidate.setManaged(show);
+                candidate.setVisible(show);
+            }
+        }
     }
 
     private void updateWalletTransactions(List<Rental> rentals) {
         walletTransactionList.getChildren().clear();
-        if (SessionManager.getInstance().getCurrentUser() != null) {
-            paymentService.getWalletTopUpsByUser(SessionManager.getInstance().getCurrentUser().getId()).forEach(payment -> {
-                Label item = new Label(
-                    "Wallet top-up • +" + ValidationUtil.formatCurrency(payment.getTotalAmount())
-                        + " • " + payment.getPaymentMethod()
-                        + " • " + payment.getTransactionRef()
-                );
-                item.getStyleClass().add("text-body");
-                walletTransactionList.getChildren().add(item);
-            });
-        }
         List<Rental> completed = rentals.stream()
             .filter(rental -> rental.getStatus() == Rental.RentalStatus.COMPLETED)
             .toList();
@@ -340,6 +408,11 @@ public class SupplierDashboardController implements Initializable {
 
     @FXML
     private void onTopUpWallet() {
+        AlertUtil.showInfo("Wallet is read-only", "Supplier wallets show rental settlement transactions only. Money is credited after successful rentals.");
+        return;
+    }
+
+    private void unusedTopUpWalletLegacy() {
         if (SessionManager.getInstance().getCurrentUser() == null) {
             return;
         }
@@ -376,6 +449,9 @@ public class SupplierDashboardController implements Initializable {
     }
 
     private void updateWalletTopUpHints() {
+        if (walletTopUpMethodCombo == null || walletTopUpReferenceField == null) {
+            return;
+        }
         boolean upi = "UPI".equals(walletTopUpMethodCombo.getValue());
         walletTopUpReferenceField.setPromptText(upi ? "name@bank" : "1234 5678 9012 3456");
         walletTopUpHolderField.setPromptText(upi ? "UPI account holder" : "Card holder name");
@@ -385,6 +461,48 @@ public class SupplierDashboardController implements Initializable {
             walletTopUpExpiryField.clear();
             walletTopUpCvvField.clear();
         }
+    }
+
+    private void updateHistory(List<Rental> rentals) {
+        if (supplierHistoryList == null) return;
+        supplierHistoryList.getChildren().clear();
+        List<Rental> history = rentals.stream()
+            .filter(rental -> rental.getStatus() == Rental.RentalStatus.COMPLETED
+                || rental.getStatus() == Rental.RentalStatus.CANCELLED
+                || rental.getStatus() == Rental.RentalStatus.REJECTED)
+            .toList();
+        if (history.isEmpty()) {
+            Label empty = new Label("No past supplier actions yet.");
+            empty.getStyleClass().add("text-muted");
+            supplierHistoryList.getChildren().add(empty);
+            return;
+        }
+        for (Rental rental : history) {
+            Label item = new Label(
+                (rental.getVehicleName() != null ? rental.getVehicleName() : "Vehicle")
+                    + " • " + rental.getStatus().name()
+                    + " • " + (rental.getRenterName() != null ? rental.getRenterName() : "Customer")
+                    + " • " + ValidationUtil.formatCurrency(rental.getTotalAmount() + rental.getPenaltyAmount())
+            );
+            item.getStyleClass().add("text-body");
+            supplierHistoryList.getChildren().add(item);
+        }
+    }
+
+    private void updateVehicleStatus(Vehicle vehicle, Vehicle.Status newStatus) {
+        if (vehicle == null || vehicle.getId() == null) {
+            return;
+        }
+        boolean activeRentalExists = allSupplierRentalsCache.stream()
+            .anyMatch(rental -> rental.getVehicleId() != null
+                && rental.getVehicleId().equals(vehicle.getId())
+                && (rental.getStatus() == Rental.RentalStatus.ACTIVE || rental.getStatus() == Rental.RentalStatus.OVERDUE));
+        if (activeRentalExists && newStatus != Vehicle.Status.IN_USE) {
+            AlertUtil.showError("Vehicle Busy", "This depot vehicle is still tied to an active rental.");
+            return;
+        }
+        vehicleDAO.updateStatus(vehicle.getId(), newStatus);
+        loadDashboard();
     }
 
     private Node createAnalyticsPage(Integer index) {
