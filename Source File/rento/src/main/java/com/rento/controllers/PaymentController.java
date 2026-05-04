@@ -2,9 +2,11 @@ package com.rento.controllers;
 
 import com.rento.models.Booking;
 import com.rento.models.Payment;
+import com.rento.models.PaymentMethodProfile;
 import com.rento.navigation.NavigationManager;
 import com.rento.security.SessionManager;
 import com.rento.services.BookingService;
+import com.rento.services.PaymentMethodService;
 import com.rento.services.PaymentService;
 import com.rento.utils.DateTimeUtil;
 import com.rento.utils.AlertUtil;
@@ -28,15 +30,19 @@ import java.util.ResourceBundle;
 public class PaymentController implements Initializable {
 
     @FXML private ComboBox<String> methodCombo;
-    @FXML private Label accountNumberLabel;
-    @FXML private Label accountNameLabel;
-    @FXML private TextField cardNumberField;
-    @FXML private TextField cardNameField;
-    @FXML private TextField expiryField;
+    @FXML private Label         accountNumberLabel;
+    @FXML private Label         accountNameLabel;
+    @FXML private TextField     cardNumberField;
+    @FXML private Label         cardNumberError;    // below card number field
+    @FXML private TextField     cardNameField;
+    @FXML private Label         cardNameError;      // below cardholder name
+    @FXML private TextField     expiryField;
+    @FXML private Label         expiryError;
     @FXML private PasswordField cvvField;
-    @FXML private Label errorLabel;
-    @FXML private StackPane processingPane;
-    @FXML private Button payBtn;
+    @FXML private Label         cvvError;
+    @FXML private Label         errorLabel;         // top banner — SHORT only
+    @FXML private StackPane     processingPane;
+    @FXML private Button        payBtn;
 
     @FXML private Label summaryVehicle;
     @FXML private Label summaryPickup;
@@ -47,18 +53,37 @@ public class PaymentController implements Initializable {
     @FXML private Label summaryTotal;
     @FXML private VBox otpSection;
     @FXML private Label otpLabel;
+    @FXML private Label savedMethodLabel;
+    @FXML private Label savedMethodHint;
+    @FXML private CheckBox useSavedProfileCheck;
+
+    private static final String STYLE_ERR =
+        "-fx-border-color: #f72585; -fx-border-width: 2px; -fx-border-radius: 6px; -fx-background-radius: 6px;";
+    private static final String STYLE_OK =
+        "-fx-border-color: transparent; -fx-border-width: 1px;";
 
     private Booking currentBooking;
     private final PaymentService paymentService = new PaymentService();
     private final BookingService bookingService = new BookingService();
+    private final PaymentMethodService paymentMethodService = new PaymentMethodService();
+    private PaymentMethodProfile preferredPaymentProfile;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
         methodCombo.setItems(FXCollections.observableArrayList(
             "Credit Card", "UPI", "Cash on Delivery"));
         methodCombo.setValue("Credit Card");
-        methodCombo.valueProperty().addListener((obs, oldValue, newValue) -> updatePaymentFields());
+        methodCombo.valueProperty().addListener((obs, o, n) -> { updatePaymentFields(); clearAll(); });
+        if (useSavedProfileCheck != null) {
+            useSavedProfileCheck.selectedProperty().addListener((obs, o, n) -> { updatePaymentFields(); clearAll(); });
+        }
         updatePaymentFields();
+        // Clear border + field error on type
+        attachClear(cardNumberField, cardNumberError);
+        attachClear(cardNameField,   cardNameError);
+        attachClear(expiryField,     expiryError);
+        cvvField.textProperty().addListener((obs, o, n) -> { if (!n.equals(o)) { clearH(cvvField); clearFE(cvvError); } });
+        loadSavedPaymentProfile();
     }
 
     public void setBooking(Booking booking) {
@@ -80,48 +105,45 @@ public class PaymentController implements Initializable {
 
     @FXML
     private void onPay() {
-        clearError();
+        clearAll();
+        boolean anyError = false;
 
-        if (requiresCardDetails()) {
+        if (!isUsingSavedProfile() && requiresCardDetails()) {
             String cardNum = cardNumberField.getText().replaceAll("[\\s\\-]", "");
-            if (!ValidationUtil.isValidCardNumber(cardNum)) {
-                showError("Please enter a valid card number");
-                return;
-            }
-            if (!ValidationUtil.isNotEmpty(cardNameField.getText())) {
-                showError("Please enter cardholder name");
-                return;
-            }
-            if (!ValidationUtil.isValidExpiryDate(expiryField.getText())) {
-                showError("Please enter a valid expiry date (MM/YY)");
-                return;
-            }
-            if (!ValidationUtil.isValidCVV(cvvField.getText())) {
-                showError("Please enter a valid CVV");
-                return;
-            }
-        } else if (requiresUpiDetails()) {
-            String accountValue = cardNumberField.getText() != null ? cardNumberField.getText().trim() : "";
-            if (!ValidationUtil.isValidUpiId(accountValue)) {
-                showError("Please enter a valid UPI ID");
-                return;
-            }
-            if (!ValidationUtil.isNotEmpty(cardNameField.getText())) {
-                showError("Please enter account holder name");
-                return;
-            }
+            String cardErr = ValidationUtil.validateCardNumber(cardNum);
+            if (cardErr != null) { markField(cardNumberField, cardNumberError, cardErr); anyError = true; }
+
+            if (!ValidationUtil.isNotEmpty(cardNameField.getText()))
+                { markField(cardNameField, cardNameError, "Cardholder name is required"); anyError = true; }
+
+            String expErr = ValidationUtil.validateExpiryDate(expiryField.getText());
+            if (expErr != null) { markField(expiryField, expiryError, expErr); anyError = true; }
+
+            String cvvErr = ValidationUtil.validateCVV(cvvField.getText());
+            if (cvvErr != null) { markField(cvvField, cvvError, cvvErr); anyError = true; }
+
+        } else if (!isUsingSavedProfile() && requiresUpiDetails()) {
+            String upiVal = cardNumberField.getText() != null ? cardNumberField.getText().trim() : "";
+            String upiErr = ValidationUtil.validateUpiId(upiVal);
+            if (upiErr != null) { markField(cardNumberField, cardNumberError, upiErr); anyError = true; }
+
+            if (!ValidationUtil.isNotEmpty(cardNameField.getText()))
+                { markField(cardNameField, cardNameError, "Account holder name is required"); anyError = true; }
+
         } else {
             if (currentBooking == null) {
-                showError("Booking details are missing for this payment.");
+                showBanner("⚠  Booking details are missing. Please go back and try again.");
                 return;
             }
         }
 
-        // Show processing animation
+        if (anyError) {
+            showBanner("⚠  Fix the highlighted fields to continue.");
+            return;
+        }
+
         payBtn.setDisable(true);
         processingPane.setVisible(true);
-
-        // Simulate processing delay
         PauseTransition delay = new PauseTransition(Duration.seconds(2));
         delay.setOnFinished(e -> completePayment());
         delay.play();
@@ -139,20 +161,26 @@ public class PaymentController implements Initializable {
                 accountHolder = SessionManager.getInstance().getCurrentUserName();
             }
 
-            Payment payment = paymentService.processPayment(
-                currentBooking != null ? currentBooking.getId() : null,
-                SessionManager.getInstance().getCurrentUser() != null ? SessionManager.getInstance().getCurrentUser().getId() : null,
-                currentBooking != null ? currentBooking.getTotalCost() - currentBooking.getTaxAmount() : 0,
-                currentBooking != null ? currentBooking.getTaxAmount() : 0,
-                currentBooking != null ? currentBooking.getTotalCost() : 0,
-                method,
-                accountReference,
-                accountHolder,
-                expiryField.getText(),
-                cvvField.getText()
-            );
+            Payment payment = isUsingSavedProfile()
+                ? paymentService.processSavedBookingPayment(currentBooking, preferredPaymentProfile)
+                : paymentService.processPayment(
+                    currentBooking != null ? currentBooking.getId() : null,
+                    SessionManager.getInstance().getCurrentUser() != null ? SessionManager.getInstance().getCurrentUser().getId() : null,
+                    currentBooking != null ? currentBooking.getTotalCost() - currentBooking.getTaxAmount() : 0,
+                    currentBooking != null ? currentBooking.getTaxAmount() : 0,
+                    currentBooking != null ? currentBooking.getTotalCost() : 0,
+                    method,
+                    accountReference,
+                    accountHolder,
+                    expiryField.getText(),
+                    cvvField.getText()
+                );
             if (payment == null) {
-                payment = createSimulatedPayment(method, accountReference, accountHolder);
+                payment = createSimulatedPayment(
+                    isUsingSavedProfile() ? paymentMethodService.toPaymentMethod(preferredPaymentProfile) : method,
+                    isUsingSavedProfile() ? preferredPaymentProfile.getMaskedReference() : accountReference,
+                    isUsingSavedProfile() ? preferredPaymentProfile.getHolderName() : accountHolder
+                );
             }
 
             // Ensure booking is properly persisted with all payment details
@@ -206,6 +234,45 @@ public class PaymentController implements Initializable {
     }
 
     private void updatePaymentFields() {
+        if (isUsingSavedProfile()) {
+            methodCombo.setValue(labelFromProfile(preferredPaymentProfile));
+            methodCombo.setDisable(true);
+            cardNumberField.setText(preferredPaymentProfile.getMaskedReference());
+            cardNameField.setText(preferredPaymentProfile.getHolderName());
+            cardNumberField.setDisable(true);
+            cardNameField.setDisable(true);
+            expiryField.clear();
+            cvvField.clear();
+            expiryField.setDisable(true);
+            cvvField.setDisable(true);
+            accountNumberLabel.setText(preferredPaymentProfile.getMethodType() == PaymentMethodProfile.MethodType.UPI
+                ? "Saved UPI ID" : preferredPaymentProfile.getMethodType() == PaymentMethodProfile.MethodType.CASH_ON_DELIVERY
+                ? "Collection Mode" : "Saved Card");
+            accountNameLabel.setText("Saved Holder");
+            if (savedMethodLabel != null) {
+                savedMethodLabel.setText("Using saved payment profile: " + preferredPaymentProfile.getProfileName());
+                savedMethodLabel.setVisible(true);
+            }
+            if (savedMethodHint != null) {
+                savedMethodHint.setText("This offline build reuses your masked reference and holder name inside checkout.");
+                savedMethodHint.setVisible(true);
+            }
+            return;
+        }
+
+        methodCombo.setDisable(false);
+        if (savedMethodLabel != null) {
+            savedMethodLabel.setText(preferredPaymentProfile != null
+                ? "Saved profile available: " + preferredPaymentProfile.getProfileName()
+                : "");
+            savedMethodLabel.setVisible(preferredPaymentProfile != null);
+        }
+        if (savedMethodHint != null) {
+            savedMethodHint.setText(preferredPaymentProfile != null
+                ? "Uncheck the saved profile option to use a new card, UPI, or cash-on-delivery for this payment."
+                : "");
+            savedMethodHint.setVisible(preferredPaymentProfile != null);
+        }
         boolean showCardFields = requiresCardDetails();
         boolean showUpiFields = requiresUpiDetails();
         cardNumberField.setDisable(false);
@@ -247,8 +314,45 @@ public class PaymentController implements Initializable {
         }
     }
 
-    private void showError(String msg) { errorLabel.setText(msg); errorLabel.setVisible(true); }
-    private void clearError() { errorLabel.setText(""); errorLabel.setVisible(false); }
+    // -----------------------------------------------------------------------
+    // Error display helpers
+    // -----------------------------------------------------------------------
+
+    private void markField(Control field, Label lbl, String message) {
+        field.setStyle(STYLE_ERR);
+        if (lbl != null) {
+            lbl.setText(message);
+            lbl.setStyle("-fx-text-fill: #f72585; -fx-font-size: 11px;");
+            lbl.setVisible(true);
+            lbl.setManaged(true);
+        }
+        Tooltip tip = new Tooltip(message);
+        tip.setStyle("-fx-font-size: 12px;");
+        Tooltip.install(field, tip);
+    }
+
+    private void clearH(Control c)    { c.setStyle(STYLE_OK); Tooltip.install(c, null); }
+    private void clearFE(Label lbl)   { if (lbl == null) return; lbl.setText(""); lbl.setVisible(false); lbl.setManaged(false); }
+
+    private void attachClear(TextField f, Label lbl) {
+        f.textProperty().addListener((obs, o, n) -> { if (!n.equals(o)) { clearH(f); clearFE(lbl); } });
+    }
+
+    private void showBanner(String msg) {
+        if (errorLabel == null) return;
+        errorLabel.setText(msg);
+        errorLabel.setStyle("-fx-text-fill: #f72585; -fx-font-weight: bold;");
+        errorLabel.setVisible(true);
+        errorLabel.setManaged(true);
+    }
+
+    private void clearAll() {
+        if (errorLabel != null) { errorLabel.setText(""); errorLabel.setVisible(false); errorLabel.setManaged(false); }
+        clearH(cardNumberField); clearFE(cardNumberError);
+        clearH(cardNameField);   clearFE(cardNameError);
+        clearH(expiryField);     clearFE(expiryError);
+        clearH(cvvField);        clearFE(cvvError);
+    }
 
     private Payment createSimulatedPayment(Payment.PaymentMethod method, String accountReference, String accountHolder) {
         Payment payment = new Payment();
@@ -271,5 +375,40 @@ public class PaymentController implements Initializable {
             : Payment.PaymentStatus.COMPLETED);
         payment.setTransactionRef(OTPGenerator.generateTransactionRef());
         return payment;
+    }
+
+    private void loadSavedPaymentProfile() {
+        if (SessionManager.getInstance().getCurrentUser() == null) {
+            preferredPaymentProfile = null;
+            if (useSavedProfileCheck != null) {
+                useSavedProfileCheck.setVisible(false);
+                useSavedProfileCheck.setManaged(false);
+            }
+            return;
+        }
+        preferredPaymentProfile = paymentMethodService.getPreferredPaymentMethod(
+            SessionManager.getInstance().getCurrentUser().getId()
+        );
+        if (useSavedProfileCheck != null) {
+            boolean hasSavedProfile = preferredPaymentProfile != null;
+            useSavedProfileCheck.setVisible(hasSavedProfile);
+            useSavedProfileCheck.setManaged(hasSavedProfile);
+            useSavedProfileCheck.setSelected(hasSavedProfile);
+        }
+        updatePaymentFields();
+    }
+
+    private boolean isUsingSavedProfile() {
+        return preferredPaymentProfile != null
+            && useSavedProfileCheck != null
+            && useSavedProfileCheck.isSelected();
+    }
+
+    private String labelFromProfile(PaymentMethodProfile profile) {
+        return switch (profile.getMethodType()) {
+            case UPI -> "UPI";
+            case CASH_ON_DELIVERY -> "Cash on Delivery";
+            default -> "Credit Card";
+        };
     }
 }
