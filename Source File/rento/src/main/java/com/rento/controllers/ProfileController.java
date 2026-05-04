@@ -3,15 +3,22 @@ package com.rento.controllers;
 import com.rento.dao.BookingDAO;
 import com.rento.dao.RentalDAO;
 import com.rento.dao.UserDAO;
+import com.rento.models.Booking;
 import com.rento.models.PaymentMethodProfile;
+import com.rento.models.Rental;
 import com.rento.models.User;
 import com.rento.navigation.NavigationManager;
 import com.rento.security.SessionManager;
 import com.rento.services.AuthService;
+import com.rento.services.BookingService;
 import com.rento.services.NotificationService;
+import com.rento.services.OfflineMapService;
 import com.rento.services.PaymentService;
 import com.rento.services.PaymentMethodService;
 import com.rento.utils.AlertUtil;
+import com.rento.utils.DateTimeUtil;
+import com.rento.utils.MapPoint;
+import com.rento.utils.Session;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -57,6 +64,16 @@ public class ProfileController implements Initializable {
     @FXML private Button logoutBtn;
     @FXML private Button roleDashboardBtn;
     @FXML private Label notificationsSummaryLabel;
+    @FXML private VBox currentRideCard;
+    @FXML private Label currentRideStatusLabel;
+    @FXML private Label currentRideRouteLabel;
+    @FXML private Label currentRideMetaLabel;
+    @FXML private Button openCurrentRideBtn;
+    @FXML private VBox currentRentalCard;
+    @FXML private Label currentRentalStatusLabel;
+    @FXML private Label currentRentalVehicleLabel;
+    @FXML private Label currentRentalMetaLabel;
+    @FXML private Button openCurrentRentalBtn;
     @FXML private TextField walletAmountField;
     @FXML private ComboBox<String> walletMethodCombo;
     @FXML private TextField walletHolderNameField;
@@ -82,10 +99,13 @@ public class ProfileController implements Initializable {
     private final NotificationService notificationService = new NotificationService();
     private final PaymentService paymentService = new PaymentService();
     private final PaymentMethodService paymentMethodService = new PaymentMethodService();
+    private final BookingService bookingService = new BookingService();
+    private Booking activeBooking;
+    private Rental activeRental;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
-        paymentMethodTypeCombo.setItems(FXCollections.observableArrayList("Credit Card", "UPI", "Cash on Delivery"));
+        paymentMethodTypeCombo.setItems(FXCollections.observableArrayList("Credit Card", "UPI"));
         paymentMethodTypeCombo.setValue("Credit Card");
         paymentMethodTypeCombo.valueProperty().addListener((obs, oldVal, newVal) -> updatePaymentMethodHints());
         updatePaymentMethodHints();
@@ -170,10 +190,108 @@ public class ProfileController implements Initializable {
             paymentMethodsSection.setManaged(!isAdmin);
             loadNotificationsSummary(user);
             if (!isAdmin) {
+                loadCurrentRideCard(user);
+                loadCurrentRentalCard(user);
                 loadWalletTopUpHistory(user);
                 loadPaymentMethods(user);
             }
         }
+    }
+
+    private void loadCurrentRideCard(User user) {
+        if (currentRideCard == null) {
+            return;
+        }
+        List<Booking> bookings = user.getRole() == User.Role.DRIVER
+            ? bookingDAO.findByDriver(user.getId())
+            : bookingDAO.findByUser(user.getId());
+        activeBooking = bookings.stream()
+            .filter(booking -> {
+                String status = booking.getStatusString();
+                return "CONFIRMED".equals(status)
+                    || "ACCEPTED".equals(status)
+                    || "DRIVER_ARRIVED".equals(status)
+                    || "ACTIVE".equals(status)
+                    || "IN_PROGRESS".equals(status);
+            })
+            .findFirst()
+            .orElse(null);
+        boolean show = activeBooking != null;
+        currentRideCard.setVisible(show);
+        currentRideCard.setManaged(show);
+        if (openCurrentRideBtn != null) {
+            openCurrentRideBtn.setDisable(!show);
+        }
+        if (!show) {
+            return;
+        }
+        currentRideStatusLabel.setText(activeBooking.getStatusString().replace('_', ' '));
+        currentRideRouteLabel.setText(
+            (activeBooking.getPickupLocation() != null ? activeBooking.getPickupLocation() : "Pickup")
+                + " → "
+                + (activeBooking.getDropoffLocation() != null ? activeBooking.getDropoffLocation() : "Drop"));
+        currentRideMetaLabel.setText(DateTimeUtil.formatDateTime(activeBooking.getPickupDateTime())
+            + " • " + activeBooking.getRentalDurationLabel());
+    }
+
+    private void loadCurrentRentalCard(User user) {
+        if (currentRentalCard == null || user == null || user.getRole() != User.Role.USER) {
+            if (currentRentalCard != null) {
+                currentRentalCard.setVisible(false);
+                currentRentalCard.setManaged(false);
+            }
+            return;
+        }
+        activeRental = rentalDAO.findByRenter(user.getId()).stream()
+            .filter(rental -> {
+                String status = rental.getStatus() != null ? rental.getStatus().name() : "";
+                return "REQUESTED".equals(status)
+                    || "APPROVED".equals(status)
+                    || "ACTIVE".equals(status)
+                    || "OVERDUE".equals(status);
+            })
+            .findFirst()
+            .orElse(null);
+        boolean show = activeRental != null;
+        currentRentalCard.setVisible(show);
+        currentRentalCard.setManaged(show);
+        if (openCurrentRentalBtn != null) {
+            openCurrentRentalBtn.setDisable(!show);
+        }
+        if (!show) {
+            return;
+        }
+        currentRentalStatusLabel.setText(activeRental.getStatus().name().replace('_', ' '));
+        currentRentalVehicleLabel.setText((activeRental.getVehicleName() != null ? activeRental.getVehicleName() : "Vehicle")
+            + " • " + (activeRental.getVehicleLicensePlate() != null ? activeRental.getVehicleLicensePlate() : "Plate pending"));
+        currentRentalMetaLabel.setText("Supplier: " + (activeRental.getSupplierName() != null ? activeRental.getSupplierName() : "Supplier")
+            + " • Depot: " + (activeRental.getDepotLocation() != null ? activeRental.getDepotLocation() : "Supplier Depot")
+            + " • " + activeRental.getRentalDurationLabel());
+    }
+
+    @FXML
+    private void onOpenCurrentRide() {
+        if (activeBooking == null) {
+            AlertUtil.showInfo("Current Ride", "No current ride is available right now.");
+            return;
+        }
+        seedRideSession(activeBooking);
+        if (activeBooking.getStatus() == Booking.BookingStatus.IN_PROGRESS
+            || activeBooking.getStatus() == Booking.BookingStatus.ACTIVE) {
+            NavigationManager.navigateTo("/fxml/active_ride.fxml");
+        } else {
+            NavigationManager.navigateTo("/fxml/booking_confirmed.fxml");
+        }
+    }
+
+    @FXML
+    private void onOpenCurrentRental() {
+        if (activeRental == null) {
+            AlertUtil.showInfo("Current Rental", "No current rental is available right now.");
+            return;
+        }
+        Session.activeRentalId = activeRental.getId() != null ? activeRental.getId().toHexString() : null;
+        NavigationManager.navigateTo("/fxml/rent.fxml");
     }
 
     private void loadNotificationsSummary(User user) {
@@ -215,6 +333,24 @@ public class ProfileController implements Initializable {
         }
     }
     @FXML private void onNavContact() { NavigationManager.navigateTo("/fxml/contact.fxml"); }
+    @FXML private void onNavHistory() {
+        User.Role role = SessionManager.getInstance().getCurrentRole();
+        if (role == User.Role.DRIVER) {
+            NavigationManager.navigateTo("/fxml/driver_dashboard.fxml", controller -> {
+                if (controller instanceof DriverDashboardController driverDashboardController) {
+                    driverDashboardController.onShowHistory();
+                }
+            });
+        } else if (role == User.Role.SUPPLIER) {
+            NavigationManager.navigateTo("/fxml/supplier_dashboard.fxml", controller -> {
+                if (controller instanceof SupplierDashboardController supplierDashboardController) {
+                    supplierDashboardController.onShowHistory();
+                }
+            });
+        } else {
+            NavigationManager.navigateTo("/fxml/rides_history.fxml");
+        }
+    }
     @FXML private void onOpenRoleDashboard() {
         User.Role role = SessionManager.getInstance().getCurrentRole();
         switch (role) {
@@ -402,9 +538,6 @@ public class ProfileController implements Initializable {
         if ("UPI".equals(type)) {
             paymentReferenceField.setPromptText("name@bank");
             paymentProviderField.setPromptText("UPI app or bank");
-        } else if ("Cash on Delivery".equals(type)) {
-            paymentReferenceField.setPromptText("Cash on delivery");
-            paymentProviderField.setPromptText("Collected by driver or supplier");
         } else {
             paymentReferenceField.setPromptText("1234 5678 9012 3456");
             paymentProviderField.setPromptText("Card issuer");
@@ -426,8 +559,41 @@ public class ProfileController implements Initializable {
     private PaymentMethodProfile.MethodType mapMethodType() {
         return switch (paymentMethodTypeCombo.getValue()) {
             case "UPI" -> PaymentMethodProfile.MethodType.UPI;
-            case "Cash on Delivery" -> PaymentMethodProfile.MethodType.CASH_ON_DELIVERY;
             default -> PaymentMethodProfile.MethodType.CREDIT_CARD;
         };
+    }
+
+    private void seedRideSession(Booking booking) {
+        Session.activeBookingId = booking.getId() != null ? booking.getId().toHexString() : null;
+        Session.pendingPickupAddress = booking.getPickupAddress() != null ? booking.getPickupAddress() : booking.getPickupLocation();
+        Session.pendingDropAddress = booking.getDropAddress() != null ? booking.getDropAddress() : booking.getDropoffLocation();
+        Session.pendingVehicleCategory = booking.getVehicleCategory();
+        Session.pendingFareEstimate = booking.getFinalFare();
+        Session.activeBookingOtp = booking.getOtp();
+        Session.activeDriverId = booking.getDriverId() != null ? booking.getDriverId().toHexString() : null;
+        if (booking.getPickupLat() != 0 || booking.getPickupLng() != 0) {
+            Session.pendingPickupX = booking.getPickupLat();
+            Session.pendingPickupY = booking.getPickupLng();
+        }
+        if (booking.getDropLat() != 0 || booking.getDropLng() != 0) {
+            Session.pendingDropX = booking.getDropLat();
+            Session.pendingDropY = booking.getDropLng();
+        }
+        MapPoint pickupPoint = OfflineMapService.findByLabel(Session.pendingPickupAddress);
+        MapPoint dropPoint = OfflineMapService.findByLabel(Session.pendingDropAddress);
+        if ((Session.pendingPickupX == 0 && Session.pendingPickupY == 0) && pickupPoint != null) {
+            Session.pendingPickupX = pickupPoint.getX();
+            Session.pendingPickupY = pickupPoint.getY();
+        }
+        if ((Session.pendingDropX == 0 && Session.pendingDropY == 0) && dropPoint != null) {
+            Session.pendingDropX = dropPoint.getX();
+            Session.pendingDropY = dropPoint.getY();
+        }
+        if (booking.getDriverId() != null) {
+            var driverBooking = bookingService.getBookingById(booking.getId());
+            if (driverBooking != null && driverBooking.getDriverId() != null) {
+                Session.activeDriverId = driverBooking.getDriverId().toHexString();
+            }
+        }
     }
 }
