@@ -64,6 +64,10 @@ public class AdminDashboardController implements Initializable {
     @FXML private VBox incidentList;
     @FXML private VBox supplierChangeList;
     @FXML private Label noSupplierChangesLabel;
+    @FXML private VBox bookingAdminList;
+    @FXML private VBox rentalAdminList;
+    @FXML private VBox vehicleAdminList;
+    @FXML private VBox paymentAdminList;
     @FXML private ComboBox<String> mailRecipientCombo;
     @FXML private TextField mailSubjectField;
     @FXML private TextArea mailBodyArea;
@@ -118,6 +122,7 @@ public class AdminDashboardController implements Initializable {
         updateManagedActorLists(users);
         updateIncidentList(rentals, vehicles);
         updateSupplierChangeList(vehicles);
+        updateOperationsLists(bookings, rentals, vehicles, payments);
         populateMailRecipients(users);
         updateSystemDataArea(users, vehicles, bookings, rentals, payments);
         analyticsPagination.setCurrentPageIndex(Math.min(analyticsPagination.getCurrentPageIndex(), 3));
@@ -285,6 +290,122 @@ public class AdminDashboardController implements Initializable {
         }
     }
 
+    private void updateOperationsLists(List<Booking> bookings, List<Rental> rentals, List<Vehicle> vehicles, List<Payment> payments) {
+        if (bookingAdminList != null) {
+            bookingAdminList.getChildren().clear();
+            bookings.stream()
+                .sorted((a, b) -> nullSafeTime(b.getUpdatedAt()).compareTo(nullSafeTime(a.getUpdatedAt())))
+                .limit(12)
+                .forEach(booking -> bookingAdminList.getChildren().add(createBookingOpsCard(booking)));
+            addEmptyIfNeeded(bookingAdminList, "No bookings found.");
+        }
+        if (rentalAdminList != null) {
+            rentalAdminList.getChildren().clear();
+            rentals.stream()
+                .sorted((a, b) -> nullSafeTime(b.getUpdatedAt()).compareTo(nullSafeTime(a.getUpdatedAt())))
+                .limit(12)
+                .forEach(rental -> rentalAdminList.getChildren().add(createRentalOpsCard(rental)));
+            addEmptyIfNeeded(rentalAdminList, "No rentals found.");
+        }
+        if (vehicleAdminList != null) {
+            vehicleAdminList.getChildren().clear();
+            vehicles.stream()
+                .sorted((a, b) -> nullSafeTime(b.getUpdatedAt()).compareTo(nullSafeTime(a.getUpdatedAt())))
+                .limit(16)
+                .forEach(vehicle -> vehicleAdminList.getChildren().add(createVehicleOpsCard(vehicle)));
+            addEmptyIfNeeded(vehicleAdminList, "No vehicles found.");
+        }
+        if (paymentAdminList != null) {
+            paymentAdminList.getChildren().clear();
+            payments.stream()
+                .sorted((a, b) -> nullSafeTime(b.getCreatedAt()).compareTo(nullSafeTime(a.getCreatedAt())))
+                .limit(12)
+                .forEach(payment -> paymentAdminList.getChildren().add(labelCard(
+                    payment.getTransactionRef() + " • " + payment.getPaymentMethod() + " • "
+                        + payment.getStatus() + " • " + ValidationUtil.formatCurrency(payment.getTotalAmount()))));
+            addEmptyIfNeeded(paymentAdminList, "No payments found.");
+        }
+    }
+
+    private VBox createBookingOpsCard(Booking booking) {
+        VBox card = labelCard((booking.getVehicleName() != null ? booking.getVehicleName() : "Booking")
+            + " • " + booking.getStatusString()
+            + " • " + booking.getPickupLocation() + " -> " + booking.getDropoffLocation()
+            + " • Payment " + (booking.getPaymentStatus() != null ? booking.getPaymentStatus() : "PENDING"));
+        if (booking.getStatus() != Booking.BookingStatus.COMPLETED && booking.getStatus() != Booking.BookingStatus.CANCELLED) {
+            Button cancel = new Button("Admin Cancel");
+            cancel.getStyleClass().add("btn-danger");
+            cancel.setOnAction(event -> {
+                booking.setStatus(Booking.BookingStatus.CANCELLED);
+                bookingDAO.updateBooking(booking);
+                if (booking.getVehicleId() != null) vehicleDAO.updateStatus(booking.getVehicleId(), Vehicle.Status.AVAILABLE);
+                loadDashboard();
+            });
+            card.getChildren().add(cancel);
+        }
+        return card;
+    }
+
+    private VBox createRentalOpsCard(Rental rental) {
+        VBox card = labelCard((rental.getVehicleName() != null ? rental.getVehicleName() : "Rental")
+            + " • " + rental.getStatus()
+            + " • " + rental.getRenterName()
+            + " • " + rental.getSupplierName()
+            + " • Payment " + (rental.getPaymentStatus() != null ? rental.getPaymentStatus() : "PENDING"));
+        if (rental.getStatus() == Rental.RentalStatus.ACTIVE || rental.getStatus() == Rental.RentalStatus.OVERDUE) {
+            Button markReturned = new Button("Admin Mark Returned");
+            markReturned.getStyleClass().add("btn-secondary");
+            markReturned.setOnAction(event -> {
+                rentalService.markRentalReturnedBySupplier(rental.getId());
+                loadDashboard();
+            });
+            card.getChildren().add(markReturned);
+        }
+        return card;
+    }
+
+    private VBox createVehicleOpsCard(Vehicle vehicle) {
+        VBox card = labelCard(vehicle.getDisplayName()
+            + " • " + vehicle.getStatus()
+            + " • " + vehicle.getApprovalStatus()
+            + " • Depot " + (vehicle.getBranchLocation() != null ? vehicle.getBranchLocation() : "Direct booking fleet"));
+        if (vehicle.getApprovalStatus() == Vehicle.ApprovalStatus.PENDING) {
+            Button approve = new Button("Approve");
+            approve.getStyleClass().add("btn-accent");
+            approve.setOnAction(event -> {
+                vehicle.setApprovalStatus(Vehicle.ApprovalStatus.APPROVED);
+                vehicle.setAdminReviewNote("Approved by admin");
+                vehicleDAO.updateVehicle(vehicle);
+                loadDashboard();
+            });
+            card.getChildren().add(approve);
+        }
+        return card;
+    }
+
+    private VBox labelCard(String text) {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("card");
+        Label label = new Label(text);
+        label.getStyleClass().add("text-body");
+        label.setWrapText(true);
+        card.getChildren().add(label);
+        return card;
+    }
+
+    private void addEmptyIfNeeded(VBox list, String message) {
+        if (!list.getChildren().isEmpty()) {
+            return;
+        }
+        Label empty = new Label(message);
+        empty.getStyleClass().add("text-muted");
+        list.getChildren().add(empty);
+    }
+
+    private java.util.Date nullSafeTime(java.util.Date date) {
+        return date != null ? date : new java.util.Date(0);
+    }
+
     private void populateMailRecipients(List<User> users) {
         String currentSelection = mailRecipientCombo.getValue();
         mailRecipientCombo.getItems().clear();
@@ -416,7 +537,7 @@ public class AdminDashboardController implements Initializable {
             Label title = new Label("Actor Mix");
             title.getStyleClass().add("heading-3");
             PieChart chart = new PieChart();
-            chart.setPrefHeight(280);
+            chart.setPrefHeight(380);
             chart.getData().setAll(
                 new PieChart.Data("Customers", userCache.stream().filter(u -> u.getRole() == User.Role.USER).count()),
                 new PieChart.Data("Suppliers", userCache.stream().filter(u -> u.getRole() == User.Role.SUPPLIER).count()),
@@ -475,7 +596,8 @@ public class AdminDashboardController implements Initializable {
         BarChart<String, Number> chart = new BarChart<>(xAxis, yAxis);
         chart.setLegendVisible(false);
         chart.setCategoryGap(18);
-        chart.setPrefHeight(280);
+        chart.setPrefHeight(380);
+        chart.setPrefWidth(900);
         return chart;
     }
 }
