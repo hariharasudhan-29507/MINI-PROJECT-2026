@@ -1,10 +1,15 @@
 package com.rento.controllers;
 
 import com.rento.dao.VehicleDAO;
+import com.rento.models.Booking;
 import com.rento.models.User;
 import com.rento.models.Vehicle;
 import com.rento.navigation.NavigationManager;
 import com.rento.security.SessionManager;
+import com.rento.services.BookingService;
+import com.rento.utils.DateTimeUtil;
+import com.rento.utils.Session;
+import com.rento.utils.ValidationUtil;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -30,9 +35,15 @@ public class BookingController implements Initializable {
     @FXML private Label priceLabel;
     @FXML private Button profileBtn;
     @FXML private VBox emptyState;
+    @FXML private VBox currentRideCard;
+    @FXML private Label currentRideStatusLabel;
+    @FXML private Label currentRideRouteLabel;
+    @FXML private Label currentRideMetaLabel;
 
     private final VehicleDAO vehicleDAO = new VehicleDAO();
+    private final BookingService bookingService = new BookingService();
     private List<Vehicle> allVehicles;
+    private Booking currentRide;
 
     @Override
     public void initialize(URL url, ResourceBundle rb) {
@@ -44,7 +55,7 @@ public class BookingController implements Initializable {
 
         // Setup filters
         categoryFilter.setItems(FXCollections.observableArrayList(
-            "All Categories", "SEDAN", "SUV", "HATCHBACK", "COUPE", "TRUCK", "VAN", "BIKE", "BUS"));
+            "All Categories", "SEDAN", "SUV", "HATCHBACK", "COUPE", "TRUCK", "VAN", "BIKE", "SCOOTER", "BUS"));
         categoryFilter.setValue("All Categories");
 
         fuelFilter.setItems(FXCollections.observableArrayList(
@@ -53,7 +64,7 @@ public class BookingController implements Initializable {
 
         // Price slider listener
         priceSlider.valueProperty().addListener((obs, oldVal, newVal) -> {
-            priceLabel.setText("Max: ₹" + newVal.intValue() + "/day");
+            priceLabel.setText("Max: ₹" + newVal.intValue() + " base fare");
             filterVehicles();
         });
 
@@ -61,6 +72,7 @@ public class BookingController implements Initializable {
         fuelFilter.setOnAction(e -> filterVehicles());
 
         loadVehicles();
+        loadCurrentRide();
     }
 
     private void updateProfileButton() {
@@ -76,12 +88,38 @@ public class BookingController implements Initializable {
         filterVehicles();
     }
 
+    private void loadCurrentRide() {
+        if (!SessionManager.getInstance().isLoggedIn() || SessionManager.getInstance().getCurrentUser() == null) {
+            currentRideCard.setVisible(false);
+            currentRideCard.setManaged(false);
+            currentRide = null;
+            return;
+        }
+        currentRide = bookingService.getCurrentBookingForUser(SessionManager.getInstance().getCurrentUser().getId());
+        boolean hasRide = currentRide != null;
+        currentRideCard.setVisible(hasRide);
+        currentRideCard.setManaged(hasRide);
+        if (!hasRide) return;
+        currentRideStatusLabel.setText(currentRide.getStatusString());
+        currentRideRouteLabel.setText(
+            nvl(currentRide.getPickupAddress(), currentRide.getPickupLocation()) + " → "
+                + nvl(currentRide.getDropAddress(), currentRide.getDropoffLocation())
+        );
+        currentRideMetaLabel.setText(
+            nvl(currentRide.getVehicleName(), "Vehicle") + " • "
+                + (currentRide.getPickupDateTime() != null ? DateTimeUtil.formatDateTime(currentRide.getPickupDateTime()) : "Pickup time pending")
+                + " • " + ValidationUtil.formatCurrency(currentRide.getFinalFare())
+        );
+    }
+
     private void filterVehicles() {
         String category = categoryFilter.getValue();
         String fuel = fuelFilter.getValue();
         double maxPrice = priceSlider.getValue();
 
         List<Vehicle> filtered = allVehicles.stream()
+            .filter(v -> v.getOwnerId() == null)
+            .filter(v -> v.getApprovalStatus() == null || v.getApprovalStatus() == Vehicle.ApprovalStatus.APPROVED)
             .filter(v -> ("All Categories".equals(category) || (v.getCategory() != null && v.getCategory().name().equals(category))))
             .filter(v -> ("All Fuel Types".equals(fuel) || (v.getFuelType() != null && v.getFuelType().name().equals(fuel))))
             .filter(v -> v.getDailyRate() <= maxPrice)
@@ -151,6 +189,7 @@ public class BookingController implements Initializable {
         Label price = new Label("₹" + String.format("%.0f", vehicle.getDailyRate()));
         price.getStyleClass().add("vehicle-price");
         Label perDay = new Label("/day");
+        perDay.setText("/base fare");
         perDay.getStyleClass().add("text-muted");
         priceRow.getChildren().addAll(price, perDay);
 
@@ -170,6 +209,7 @@ public class BookingController implements Initializable {
         switch (category) {
             case SUV: return "🚙";
             case BIKE: return "🏍";
+            case SCOOTER: return "🛵";
             case TRUCK: return "🚛";
             case BUS: return "🚌";
             case VAN: return "🚐";
@@ -190,7 +230,29 @@ public class BookingController implements Initializable {
         });
     }
 
-    @FXML private void onRefresh() { loadVehicles(); }
+    @FXML private void onRefresh() { loadVehicles(); loadCurrentRide(); }
+    @FXML private void onOpenCurrentRide() {
+        if (currentRide == null) return;
+        Session.activeBookingId = currentRide.getId() != null ? currentRide.getId().toHexString() : null;
+        Session.pendingPickupAddress = nvl(currentRide.getPickupAddress(), currentRide.getPickupLocation());
+        Session.pendingDropAddress = nvl(currentRide.getDropAddress(), currentRide.getDropoffLocation());
+        Session.pendingVehicleCategory = currentRide.getVehicleCategory();
+        Session.pendingFareEstimate = currentRide.getFinalFare();
+        if (currentRide.getPickupLat() != 0 || currentRide.getPickupLng() != 0) {
+            Session.pendingPickupX = currentRide.getPickupLat();
+            Session.pendingPickupY = currentRide.getPickupLng();
+        }
+        if (currentRide.getDropLat() != 0 || currentRide.getDropLng() != 0) {
+            Session.pendingDropX = currentRide.getDropLat();
+            Session.pendingDropY = currentRide.getDropLng();
+        }
+        Session.activeDriverId = currentRide.getDriverId() != null ? currentRide.getDriverId().toHexString() : null;
+        if (currentRide.getStatus() == Booking.BookingStatus.IN_PROGRESS) {
+            NavigationManager.navigateTo("/fxml/active_ride.fxml");
+        } else {
+            NavigationManager.navigateTo("/fxml/booking_confirmed.fxml");
+        }
+    }
     @FXML private void onNavHome() { NavigationManager.navigateTo("/fxml/landing.fxml"); }
     @FXML private void onNavAbout() { NavigationManager.navigateTo("/fxml/about.fxml"); }
     @FXML private void onNavRent() { NavigationManager.navigateTo("/fxml/rent.fxml"); }
@@ -215,5 +277,9 @@ public class BookingController implements Initializable {
             case SUPPLIER -> "/fxml/supplier_dashboard.fxml";
             default -> "/fxml/landing.fxml";
         };
+    }
+
+    private String nvl(String value, String fallback) {
+        return value != null && !value.isBlank() ? value : (fallback != null ? fallback : "-");
     }
 }
