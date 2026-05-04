@@ -18,6 +18,7 @@ public class LandingController implements Initializable {
     @FXML private Button profileBtn;
     @FXML private Button bookNavButton;
     @FXML private Button rentNavButton;
+    @FXML private Button currentDriveNavButton;
     @FXML private Button userBoardNavButton;
     @FXML private Button driverBoardNavButton;
     @FXML private Button supplierBoardNavButton;
@@ -38,14 +39,18 @@ public class LandingController implements Initializable {
 
     private void updateNavigationByRole() {
         boolean isAdmin = SessionManager.getInstance().getCurrentRole() == User.Role.ADMIN;
-        bookNavButton.setVisible(!isAdmin);
-        bookNavButton.setManaged(!isAdmin);
-        rentNavButton.setVisible(!isAdmin);
-        rentNavButton.setManaged(!isAdmin);
+        boolean isDriver = SessionManager.getInstance().getCurrentRole() == User.Role.DRIVER;
+        bookNavButton.setVisible(!isAdmin && !isDriver);
+        bookNavButton.setManaged(!isAdmin && !isDriver);
+        rentNavButton.setVisible(!isAdmin && !isDriver);
+        rentNavButton.setManaged(!isAdmin && !isDriver);
+        currentDriveNavButton.setVisible(isDriver);
+        currentDriveNavButton.setManaged(isDriver);
+        driverBoardNavButton.setText(isDriver ? "Dashboard" : "Driver Dashboard");
+        driverBoardNavButton.setVisible(isAdmin || isDriver);
+        driverBoardNavButton.setManaged(isAdmin || isDriver);
         userBoardNavButton.setVisible(isAdmin);
         userBoardNavButton.setManaged(isAdmin);
-        driverBoardNavButton.setVisible(isAdmin);
-        driverBoardNavButton.setManaged(isAdmin);
         supplierBoardNavButton.setVisible(isAdmin);
         supplierBoardNavButton.setManaged(isAdmin);
     }
@@ -98,9 +103,22 @@ public class LandingController implements Initializable {
 
     @FXML
     private void onNavAdminDriverBoard() {
+        if (SessionManager.getInstance().getCurrentRole() == User.Role.DRIVER) {
+            NavigationManager.navigateTo("/fxml/driver_dashboard.fxml");
+            return;
+        }
         NavigationManager.navigateTo("/fxml/admin_dashboard.fxml", controller -> {
             if (controller instanceof AdminDashboardController adminDashboardController) {
                 adminDashboardController.openBoard("DRIVER");
+            }
+        });
+    }
+
+    @FXML
+    private void onNavDriverCurrentDrive() {
+        NavigationManager.navigateTo("/fxml/driver_dashboard.fxml", controller -> {
+            if (controller instanceof DriverDashboardController driverDashboardController) {
+                driverDashboardController.onShowCurrentDrive();
             }
         });
     }
