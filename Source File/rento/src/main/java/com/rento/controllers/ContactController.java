@@ -3,7 +3,6 @@ package com.rento.controllers;
 import com.rento.navigation.NavigationManager;
 import com.rento.security.SessionManager;
 import javafx.fxml.FXML;
-
 /**
  * Controller for the Contact page.
  */
@@ -35,3 +34,4 @@ public class ContactController {
         };
     }
 }
+
