@@ -54,6 +54,158 @@ Rento/
     └── README.md
 ```
 
+## Source File
+
+The `Source File/` directory contains all source code, dependencies, and resources for the application.
+
+### `jars/`
+
+Holds every third-party JAR the project depends on — no build tool (Maven/Gradle) is used, so all dependencies are bundled here and added to the IDE classpath manually.
+
+| JAR | Purpose |
+|-----|---------|
+| `javafx-sdk-21.0.10/` + individual JavaFX JARs | UI framework (controls, FXML, graphics, media, web) |
+| `mongodb-driver-sync-5.2.1.jar`, `mongodb-driver-core-5.2.1.jar`, `bson-5.2.1.jar` | MongoDB Java driver for database access |
+| `jbcrypt-0.4.jar` | Password hashing (bcrypt) |
+| `itextpdf-5.5.13.3.jar` | PDF receipt generation |
+| `controlsfx-11.1.2.jar` | Extended JavaFX UI controls |
+| `gson-2.10.1.jar` | JSON serialisation/deserialisation |
+| `slf4j-api-2.0.13.jar`, `slf4j-simple-2.0.13.jar` | Logging façade and simple backend |
+
+---
+
+### `rento/src/main/java/com/rento/`
+
+All Java source packages live here.
+
+#### `app/`
+Contains `RentoApplication.java` — the JavaFX `Application` subclass that serves as the single entry point. It bootstraps the database, seeds demo data on first launch, and loads the initial scene.
+
+#### `controllers/`
+One JavaFX controller per screen. Each controller handles user interactions for its corresponding FXML view, delegates business logic to the `services` layer, and uses `NavigationManager` to switch scenes. Key controllers:
+
+| Controller | Responsibility |
+|---|---|
+| `LoginController` / `RegisterController` | Authentication and new-account creation |
+| `LandingController` | Home/browse screen for customers |
+| `RentController` / `BookingController` | Vehicle selection, rental and booking flows |
+| `PaymentController` / `PaymentSetupController` | Payment processing and saved-method management |
+| `AdminDashboardController` | Platform-level admin operations and exports |
+| `SupplierDashboardController` | Fleet and rental management for suppliers |
+| `DriverDashboardController` | Assigned-booking management for drivers |
+| `ProfileController` | User profile viewing and editing |
+
+#### `services/`
+Business-logic layer; called by controllers and isolated from the database. Each service class owns one domain area:
+
+| Service | Responsibility |
+|---|---|
+| `AuthService` | Login, registration, password validation |
+| `BookingService` | Creating, updating, and cancelling bookings |
+| `RentalService` | Rental lifecycle management |
+| `PaymentService` | Payment processing and history |
+| `PaymentMethodService` | Saving and retrieving payment methods |
+| `ReceiptService` | Generating PDF and text receipts |
+| `DemoDataService` | Seeding demo users and vehicles on first launch |
+| `AdminExportService` | CSV/data export for admins |
+| `NotificationService` | In-app notification helpers |
+| `SystemCollectionBootstrapService` | Ensuring required MongoDB collections exist |
+
+#### `dao/`
+Data-access objects (DAOs) that interact directly with MongoDB. Each DAO wraps CRUD and query operations for one collection:
+
+| DAO | Collection |
+|---|---|
+| `UserDAO` | `users` |
+| `VehicleDAO` | `vehicles` |
+| `BookingDAO` | `bookings` |
+| `RentalDAO` | `rentals` |
+| `PaymentDAO` | `payments` |
+| `PaymentMethodDAO` | `payment_methods` |
+
+#### `models/`
+Plain Java classes that map to MongoDB documents: `User`, `Vehicle`, `Booking`, `Rental`, `Payment`, `PaymentMethodProfile`. These are passed between layers and serialised/deserialised by the DAOs.
+
+#### `utils/`
+Shared helper classes used across the application:
+
+| Utility | Purpose |
+|---|---|
+| `MongoDBConnection` | Singleton that holds the `MongoClient` / `MongoDatabase` reference |
+| `ValidationUtil` | Common input-validation rules (email, phone, etc.) |
+| `DateTimeUtil` | Date formatting and parsing helpers |
+| `AlertUtil` | JavaFX `Alert` dialog builder shortcuts |
+| `CaptchaGenerator` | Simple text CAPTCHA for login |
+| `OTPGenerator` | One-time password generation |
+
+#### `security/`
+Security primitives used by `AuthService` and `controllers`:
+
+| Class | Purpose |
+|---|---|
+| `PasswordHasher` | Wraps jBCrypt to hash and verify passwords |
+| `SessionManager` | Stores and clears the currently logged-in user for the lifetime of the JVM session |
+
+#### `navigation/`
+`NavigationManager.java` — a singleton that manages the JavaFX `Stage` and handles all scene transitions. Controllers call it to navigate between screens without needing a reference to the `Stage` directly.
+
+---
+
+### `rento/src/main/resources/`
+
+Static assets loaded at runtime.
+
+#### `fxml/`
+One `.fxml` file per screen, defining the UI layout declaratively. Each file is paired with a controller class of the same name (e.g. `login.fxml` ↔ `LoginController`).
+
+#### `css/`
+Contains `global.css`, a single stylesheet applied application-wide to give all screens a consistent look and feel.
+
+#### `images/`
+Placeholder directory for image assets (icons, vehicle photos, logos) used by the UI.
+
+#### `fonts/`
+Placeholder directory for custom font files loaded by the CSS or controllers.
+
+---
+
+## Application Workflow
+
+```
+User launches app
+        │
+        ▼
+RentoApplication.java (entry point)
+  ├─ Connects to MongoDB via MongoDBConnection
+  ├─ Runs SystemCollectionBootstrapService  → ensures collections exist
+  ├─ Runs DemoDataService                  → seeds demo accounts & vehicles if DB is empty
+  └─ Loads landing/login scene via NavigationManager
+        │
+        ▼
+LoginController / RegisterController
+  └─ AuthService → UserDAO → MongoDB
+        │  (session stored in SessionManager)
+        ▼
+Role-based dashboard
+  ├─ Customer  → LandingController → RentController / BookingController
+  │                  └─ RentalService / BookingService → RentalDAO / BookingDAO
+  │                       └─ PaymentController → PaymentService → PaymentDAO
+  │                            └─ ReceiptService → PDF/TXT receipt
+  │
+  ├─ Supplier  → SupplierDashboardController
+  │                  └─ RentalService / VehicleDAO → fleet & rental management
+  │
+  ├─ Driver    → DriverDashboardController
+  │                  └─ BookingService / BookingDAO → assigned bookings & trip lifecycle
+  │
+  └─ Admin     → AdminDashboardController
+                    └─ AdminExportService → CSV exports & platform operations
+```
+
+Every screen transition goes through `NavigationManager`. Each controller delegates business operations to the `services` layer, which in turn calls the appropriate `dao` class. `models` objects carry data between all layers. `security` classes protect authentication, and `utils` provide cross-cutting helpers throughout.
+
+---
+
 ## Setup Guide (Complete)
 
 ### 1) Prerequisites
