@@ -1,118 +1,160 @@
 # Rento — Vehicle Rental & Booking System
 
-Rento is a Java desktop application for end-to-end vehicle rental and booking management.  
-It supports customer booking/rental flows and role-based operations for Admin, Supplier, and Driver users.
-
-## What this project does
-
-- User registration and login with secure password hashing
-- Vehicle browsing, rental, and booking workflows
-- Payment flow with receipt generation (PDF/TXT)
-- Role-based dashboards:
-  - **Admin**: platform-level operations and exports
-  - **Supplier**: fleet and rental management
-  - **Driver**: assigned booking management
-- Demo data seeding for first-time local setup
-
-## Tech Stack
-
-- **Language:** Java
-- **UI Framework:** JavaFX (FXML + CSS)
-- **Database:** MongoDB
-- **Database Driver:** MongoDB Java Driver (sync)
-- **Security:** jBCrypt (password hashing), session handling
-- **Reporting/Exports:** iText PDF, Gson, file-based exports
-- **UI Add-ons:** ControlsFX
-- **Logging:** SLF4J (simple backend)
-
-## Project Structure
-
-```text
-Rento/
-├── README.md
-├── Documentation/
-│   ├── SRS VRBS.pdf
-│   └── SPECIFICATION VRBS.pdf
-├── Source File/
-│   ├── jars/                      # Third-party dependencies and JavaFX SDK
-│   └── rento/
-│       └── src/main/
-│           ├── java/com/rento/
-│           │   ├── app/           # App entry point
-│           │   ├── controllers/   # JavaFX controllers
-│           │   ├── services/      # Business logic
-│           │   ├── dao/           # Data access (MongoDB)
-│           │   ├── models/        # Domain models
-│           │   ├── utils/         # Utilities and DB connection
-│           │   ├── security/      # Auth/session helpers
-│           │   └── navigation/    # Scene/navigation manager
-│           └── resources/
-│               ├── fxml/          # UI layouts
-│               ├── css/           # Styling
-│               └── images/        # App assets
-└── UML diagrams/
-    └── README.md
-```
-
-## Source File
-
-The `Source File/` directory contains all source code, dependencies, and resources for the application.
-
-### `jars/`
-
-Holds every third-party JAR the project depends on — no build tool (Maven/Gradle) is used, so all dependencies are bundled here and added to the IDE classpath manually.
-
-| JAR | Purpose |
-|-----|---------|
-| `javafx-sdk-21.0.10/` + individual JavaFX JARs | UI framework (controls, FXML, graphics, media, web) |
-| `mongodb-driver-sync-5.2.1.jar`, `mongodb-driver-core-5.2.1.jar`, `bson-5.2.1.jar` | MongoDB Java driver for database access |
-| `jbcrypt-0.4.jar` | Password hashing (bcrypt) |
-| `itextpdf-5.5.13.3.jar` | PDF receipt generation |
-| `controlsfx-11.1.2.jar` | Extended JavaFX UI controls |
-| `gson-2.10.1.jar` | JSON serialisation/deserialisation |
-| `slf4j-api-2.0.13.jar`, `slf4j-simple-2.0.13.jar` | Logging façade and simple backend |
+Rento is a Java desktop application that delivers end-to-end vehicle rental and booking management. It supports the full lifecycle of a ride — from vehicle discovery and OTP-secured pickup through payment, receipt generation, and supplier fleet management — across four distinct role-based experiences: **Customer**, **Driver**, **Supplier**, and **Admin**.
 
 ---
 
-### `rento/src/main/java/com/rento/`
+## Key Features
 
-All Java source packages live here.
+| Capability | Details |
+|---|---|
+| **Authentication** | Registration and login with CAPTCHA challenge and BCrypt password hashing |
+| **Role-Based Access** | Four roles — USER, DRIVER, SUPPLIER, ADMIN — each routed to a dedicated dashboard |
+| **Vehicle Booking** | Browse, select, and book vehicles with dynamic pricing (weekend surcharge, multi-day discount, 18% tax, 25% deposit) |
+| **Rental Marketplace** | Supplier-listed vehicles available for self-drive rentals; full approval and OTP-activation workflow |
+| **Payment Simulation** | Credit/debit card (Luhn-validated), UPI, net banking, and wallet payment methods |
+| **OTP Ride Security** | A 6-digit OTP ties payment confirmation to physical trip start; verified by the driver at pickup |
+| **Receipt & Export** | Automated PDF and TXT receipt generation; admin-level full-platform data export |
+| **Demo Data Seeding** | First-launch automatic seeding of demo users and vehicle fleet into MongoDB |
 
-#### `app/`
-Contains `RentoApplication.java` — the JavaFX `Application` subclass that serves as the single entry point. It bootstraps the database, seeds demo data on first launch, and loads the initial scene.
+---
 
-#### `controllers/`
-One JavaFX controller per screen. Each controller handles user interactions for its corresponding FXML view, delegates business logic to the `services` layer, and uses `NavigationManager` to switch scenes. Key controllers:
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Java 21 |
+| UI Framework | JavaFX 21 (FXML + CSS) |
+| Database | MongoDB (`rento_db` on `localhost:27017`) |
+| DB Driver | MongoDB Java Driver Sync 5.2.1 |
+| Password Security | jBCrypt 0.4 |
+| PDF Generation | iText PDF 5.5.13.3 |
+| JSON Handling | Gson 2.10.1 |
+| Extended UI Controls | ControlsFX 11.1.2 |
+| Logging | SLF4J 2.0.13 (simple backend) |
+
+---
+
+## Repository Layout
+
+```text
+Rento/
+├── README.md               ← This file
+├── WIKI.md                 ← Architecture, test cases, and module reference
+├── SECURITY.md             ← Security policy
+├── Documentation/          ← SRS and project specification PDFs
+├── UML diagrams/           ← Mermaid class, sequence, and flow diagrams
+└── Source File/            ← All application source code and bundled dependencies
+    ├── jars/               ← Third-party JARs (no build tool required)
+    └── rento/src/main/
+        ├── java/com/rento/ ← Java source packages
+        └── resources/      ← FXML layouts, CSS, fonts, images
+```
+
+---
+
+## Sub-Repository Guide
+
+### `Documentation/`
+
+Contains the formal project documents produced during the specification phase.
+
+| File | Contents |
+|---|---|
+| `SRS VRBS.pdf` | Software Requirements Specification — functional and non-functional requirements, use-case descriptions, and constraints for the Vehicle Rental & Booking System |
+| `SPECIFICATION VRBS.pdf` | ER diagram and detailed project specification, covering data models, relationships, and system-wide design decisions |
+
+These documents are the authoritative reference for understanding *why* certain design choices were made in the source code.
+
+---
+
+### `UML diagrams/`
+
+Contains a single `README.md` that renders four Mermaid diagrams inline on GitHub:
+
+| Diagram | What it shows |
+|---|---|
+| **Class Diagram** | Full domain model — `User`, `Vehicle`, `Booking`, `Rental`, `Payment`, their attributes, enumerations (`Role`, `VehicleStatus`, `BookingStatus`, etc.), and inter-entity relationships |
+| **Booking Sequence Diagram** | Message flow between Customer, Driver, `BookingService`, `VehicleDAO`, `PaymentService`, and `NotificationService` across the full booking lifecycle |
+| **Rental Sequence Diagram** | Message flow for the supplier-driven rental path — request, approve, OTP confirm, activate, and complete |
+| **Application Flow Diagram** | Top-level flowchart of the entire application from launch through each role's workflow |
+
+These diagrams are kept in sync with the source code and serve as the primary onboarding reference for new contributors.
+
+---
+
+### `WIKI.md`
+
+Comprehensive reference document covering:
+
+- **Architecture overview** — the five-layer model (Presentation, Service, DAO, Domain, Infrastructure)
+- **Component details** — controller responsibilities, DAO-to-collection mapping, and service ownership
+- **Business rules** — pricing formula, OTP flows, driver commission (15%), rental overdue penalty (25% per day), approval workflow
+- **Valid and invalid test scenarios** — 38 documented scenarios covering authentication, booking, payment, and rental flows
+- **Build and run notes** — dependency management approach and manual execution instructions
+
+---
+
+### `Source File/`
+
+The root of all application code and runtime dependencies.
+
+#### `jars/`
+
+All third-party dependencies are bundled as JARs — the project does not use Maven or Gradle. These are added to the IDE classpath via the checked-in `.classpath` file.
+
+| JAR | Purpose |
+|---|---|
+| `javafx-sdk-21.0.10/` + individual JavaFX JARs | UI framework — controls, FXML, graphics, media, and web modules |
+| `mongodb-driver-sync-5.2.1.jar`, `mongodb-driver-core-5.2.1.jar`, `bson-5.2.1.jar` | MongoDB Java driver for synchronous database access |
+| `jbcrypt-0.4.jar` | BCrypt password hashing |
+| `itextpdf-5.5.13.3.jar` | PDF receipt generation |
+| `controlsfx-11.1.2.jar` | Extended JavaFX UI controls |
+| `gson-2.10.1.jar` | JSON serialisation and deserialisation |
+| `slf4j-api-2.0.13.jar`, `slf4j-simple-2.0.13.jar` | Logging façade and simple backend |
+
+#### `rento/src/main/java/com/rento/` — Java Source Packages
+
+| Package | Role in the application |
+|---|---|
+| `app/` | `RentoApplication.java` — the JavaFX `Application` entry point. Initialises the MongoDB connection, runs the collection bootstrap and demo-data seed, then loads the landing scene. |
+| `controllers/` | One controller per screen. Each class handles UI events for its paired FXML view, delegates all business logic to the `services` layer, and calls `NavigationManager` for scene transitions. |
+| `services/` | Business-logic layer. Services are the only callers of DAOs and the only layer that enforces domain rules (pricing, OTP generation, approval workflows, receipt formatting). |
+| `dao/` | Data-access objects. Each DAO class owns all MongoDB reads and writes for one collection and maps between Java model objects and BSON documents. |
+| `models/` | Plain Java domain objects — `User`, `Vehicle`, `Booking`, `Rental`, `Payment`, `PaymentMethodProfile` — passed between all layers. |
+| `security/` | `PasswordHasher` (BCrypt wrap) and `SessionManager` (JVM-scoped logged-in user state). |
+| `navigation/` | `NavigationManager` singleton — manages the JavaFX `Stage` and all scene transitions so controllers never hold a direct `Stage` reference. |
+| `utils/` | Cross-cutting helpers: `MongoDBConnection` (singleton client), `ValidationUtil`, `DateTimeUtil`, `AlertUtil`, `CaptchaGenerator`, `OTPGenerator`. |
+
+**Key controllers:**
 
 | Controller | Responsibility |
 |---|---|
-| `LoginController` / `RegisterController` | Authentication and new-account creation |
-| `LandingController` | Home/browse screen for customers |
-| `RentController` / `BookingController` | Vehicle selection, rental and booking flows |
-| `PaymentController` / `PaymentSetupController` | Payment processing and saved-method management |
-| `AdminDashboardController` | Platform-level admin operations and exports |
-| `SupplierDashboardController` | Fleet and rental management for suppliers |
-| `DriverDashboardController` | Assigned-booking management for drivers |
-| `ProfileController` | User profile viewing and editing |
+| `LoginController` / `RegisterController` | Credential handling, CAPTCHA challenge, role-based post-login routing |
+| `LandingController` | Guest/authenticated entry navigation |
+| `BookingController` / `BookingDetailController` | Vehicle browse, filter, pricing preview, and booking creation |
+| `PaymentController` / `PaymentSetupController` | Payment method validation, booking payment confirmation, OTP display |
+| `RentController` | Supplier marketplace listing and renter-side rental request flow |
+| `DriverDashboardController` | Accept pending bookings, verify customer OTP, complete trips, view metrics |
+| `SupplierDashboardController` | Add/update vehicles, approve or reject rental requests, issue activation OTPs |
+| `AdminDashboardController` | Platform metrics, vehicle listing approval, user management, full export |
+| `ProfileController` | User profile, wallet balance, notifications, and dashboard routing |
 
-#### `services/`
-Business-logic layer; called by controllers and isolated from the database. Each service class owns one domain area:
+**Services and their domain ownership:**
 
 | Service | Responsibility |
 |---|---|
-| `AuthService` | Login, registration, password validation |
-| `BookingService` | Creating, updating, and cancelling bookings |
-| `RentalService` | Rental lifecycle management |
-| `PaymentService` | Payment processing and history |
-| `PaymentMethodService` | Saving and retrieving payment methods |
-| `ReceiptService` | Generating PDF and text receipts |
-| `DemoDataService` | Seeding demo users and vehicles on first launch |
-| `AdminExportService` | CSV/data export for admins |
-| `NotificationService` | In-app notification helpers |
-| `SystemCollectionBootstrapService` | Ensuring required MongoDB collections exist |
+| `AuthService` | Registration, login, logout, wallet initialisation |
+| `BookingService` | Booking creation, dynamic pricing, deposit deduction, driver assignment, OTP ride start, completion and commission |
+| `RentalService` | Full rental lifecycle: request → approve → OTP confirm → active → completed/overdue with penalty |
+| `PaymentService` | Payment method validation and simulated payment persistence |
+| `ReceiptService` | PDF and TXT receipt generation for bookings and rentals |
+| `NotificationService` | In-app notification persistence and export |
+| `AdminExportService` | Full platform snapshot export to file |
+| `DemoDataService` | First-launch seeding of users and vehicle fleet |
+| `SystemCollectionBootstrapService` | Ensures all required MongoDB collections exist before any DAO runs |
 
-#### `dao/`
-Data-access objects (DAOs) that interact directly with MongoDB. Each DAO wraps CRUD and query operations for one collection:
+**DAOs and their MongoDB collections:**
 
 | DAO | Collection |
 |---|---|
@@ -123,163 +165,117 @@ Data-access objects (DAOs) that interact directly with MongoDB. Each DAO wraps C
 | `PaymentDAO` | `payments` |
 | `PaymentMethodDAO` | `payment_methods` |
 
-#### `models/`
-Plain Java classes that map to MongoDB documents: `User`, `Vehicle`, `Booking`, `Rental`, `Payment`, `PaymentMethodProfile`. These are passed between layers and serialised/deserialised by the DAOs.
+#### `rento/src/main/resources/` — Static Assets
 
-#### `utils/`
-Shared helper classes used across the application:
-
-| Utility | Purpose |
+| Directory | Contents |
 |---|---|
-| `MongoDBConnection` | Singleton that holds the `MongoClient` / `MongoDatabase` reference |
-| `ValidationUtil` | Common input-validation rules (email, phone, etc.) |
-| `DateTimeUtil` | Date formatting and parsing helpers |
-| `AlertUtil` | JavaFX `Alert` dialog builder shortcuts |
-| `CaptchaGenerator` | Simple text CAPTCHA for login |
-| `OTPGenerator` | One-time password generation |
-
-#### `security/`
-Security primitives used by `AuthService` and `controllers`:
-
-| Class | Purpose |
-|---|---|
-| `PasswordHasher` | Wraps jBCrypt to hash and verify passwords |
-| `SessionManager` | Stores and clears the currently logged-in user for the lifetime of the JVM session |
-
-#### `navigation/`
-`NavigationManager.java` — a singleton that manages the JavaFX `Stage` and handles all scene transitions. Controllers call it to navigate between screens without needing a reference to the `Stage` directly.
+| `fxml/` | One `.fxml` layout file per screen, paired by name with its controller (e.g. `login.fxml` ↔ `LoginController`) |
+| `css/` | `global.css` — single application-wide stylesheet for consistent visual styling |
+| `fonts/` | Custom font files referenced by the CSS |
+| `images/` | Icons, vehicle photos, and logo assets used by the UI |
 
 ---
 
-### `rento/src/main/resources/`
+## Architecture & Layer Connectivity
 
-Static assets loaded at runtime.
-
-#### `fxml/`
-One `.fxml` file per screen, defining the UI layout declaratively. Each file is paired with a controller class of the same name (e.g. `login.fxml` ↔ `LoginController`).
-
-#### `css/`
-Contains `global.css`, a single stylesheet applied application-wide to give all screens a consistent look and feel.
-
-#### `images/`
-Placeholder directory for image assets (icons, vehicle photos, logos) used by the UI.
-
-#### `fonts/`
-Placeholder directory for custom font files loaded by the CSS or controllers.
-
----
-
-## Application Workflow
+Rento is structured as a strict five-layer desktop application. Data flows in one direction — UI events travel inward to the database, and results flow back outward to the screen.
 
 ```
-User launches app
+┌─────────────────────────────────────────────────────────────────┐
+│  Presentation Layer  (JavaFX — FXML + controllers)              │
+│  Handles all UI events, renders data, drives navigation         │
+└────────────────────────────┬────────────────────────────────────┘
+                             │  calls
+┌────────────────────────────▼────────────────────────────────────┐
+│  Service Layer  (Business Logic)                                │
+│  Enforces domain rules, orchestrates multi-step workflows,      │
+│  generates OTPs, calculates pricing, triggers notifications     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │  reads/writes via
+┌────────────────────────────▼────────────────────────────────────┐
+│  DAO Layer  (Data Access Objects)                               │
+│  Translates model objects to/from BSON; owns all MongoDB I/O    │
+└────────────────────────────┬────────────────────────────────────┘
+                             │  persists to
+┌────────────────────────────▼────────────────────────────────────┐
+│  MongoDB  (rento_db @ localhost:27017)                          │
+│  Collections: users, vehicles, bookings, rentals, payments,     │
+│              payment_methods, notifications                     │
+└─────────────────────────────────────────────────────────────────┘
+
+Cross-cutting infrastructure (used by all layers above):
+  • MongoDBConnection  — singleton MongoClient/MongoDatabase
+  • SessionManager     — JVM-scoped logged-in user
+  • NavigationManager  — JavaFX Stage and scene transitions
+  • utils/security     — validation, hashing, OTP, CAPTCHA, alerts
+```
+
+**End-to-end request flow:**
+
+```
+User action in UI
+      │
+      ▼
+Controller  ──calls──►  Service  ──calls──►  DAO  ──reads/writes──►  MongoDB
+      ▲                    │                                              │
+      │                    │  (model objects carried between all layers)  │
+      └────────────────────◄──────────────────────────────────────────────
+                    result returned to controller for UI update
+```
+
+**Application startup sequence:**
+
+```
+RentoApplication.start()
+  ├─ MongoDBConnection.getInstance()          → open MongoDB client
+  ├─ SystemCollectionBootstrapService.run()   → ensure collections exist
+  ├─ DemoDataService.seedIfEmpty()            → populate demo users & fleet
+  └─ NavigationManager.loadScene("landing")  → display initial screen
+```
+
+**Role routing after login:**
+
+```
+AuthService.login()  →  SessionManager.setUser()
         │
         ▼
-RentoApplication.java (entry point)
-  ├─ Connects to MongoDB via MongoDBConnection
-  ├─ Runs SystemCollectionBootstrapService  → ensures collections exist
-  ├─ Runs DemoDataService                  → seeds demo accounts & vehicles if DB is empty
-  └─ Loads landing/login scene via NavigationManager
-        │
-        ▼
-LoginController / RegisterController
-  └─ AuthService → UserDAO → MongoDB
-        │  (session stored in SessionManager)
-        ▼
-Role-based dashboard
-  ├─ Customer  → LandingController → RentController / BookingController
-  │                  └─ RentalService / BookingService → RentalDAO / BookingDAO
-  │                       └─ PaymentController → PaymentService → PaymentDAO
-  │                            └─ ReceiptService → PDF/TXT receipt
-  │
-  ├─ Supplier  → SupplierDashboardController
-  │                  └─ RentalService / VehicleDAO → fleet & rental management
-  │
-  ├─ Driver    → DriverDashboardController
-  │                  └─ BookingService / BookingDAO → assigned bookings & trip lifecycle
-  │
-  └─ Admin     → AdminDashboardController
-                    └─ AdminExportService → CSV exports & platform operations
+   User.role  ──►  USER      →  LandingController  →  Booking / Rental flows
+              ──►  DRIVER    →  DriverDashboardController
+              ──►  SUPPLIER  →  SupplierDashboardController
+              ──►  ADMIN     →  AdminDashboardController
 ```
-
-Every screen transition goes through `NavigationManager`. Each controller delegates business operations to the `services` layer, which in turn calls the appropriate `dao` class. `models` objects carry data between all layers. `security` classes protect authentication, and `utils` provide cross-cutting helpers throughout.
 
 ---
 
-## Setup Guide (Complete)
+## Demo Accounts
 
-### 1) Prerequisites
+The application seeds these accounts automatically on first launch. All share the same default password.
 
-- JDK **21** (required)
-- MongoDB Community Server (running locally on default port `27017`)
-- IDE recommended: IntelliJ IDEA / Eclipse with JavaFX support
+| Role | Email | Password |
+|---|---|---|
+| Customer | `user@rento.local` | `Rento@123` |
+| Driver | `driver@rento.local` | `Rento@123` |
+| Supplier | `supplier@rento.local` | `Rento@123` |
+| Admin | `admin@rento.local` | `Rento@123` |
 
-### 2) Clone and open the project
+---
 
-```bash
-git clone https://github.com/hariharasudhan-29507/Rento.git
-cd Rento
-```
+## Documentation & References
 
-Open the source root:
+| Resource | Link |
+|---|---|
+| Software Requirements Specification | [Documentation/SRS VRBS.pdf](./Documentation/SRS%20VRBS.pdf) |
+| ER / Project Specification | [Documentation/SPECIFICATION VRBS.pdf](./Documentation/SPECIFICATION%20VRBS.pdf) |
+| UML Diagrams | [UML diagrams/README.md](./UML%20diagrams/README.md) |
+| Architecture & Test Reference (Wiki) | [WIKI.md](./WIKI.md) |
+| GitHub Wiki | https://github.com/hariharasudhan-29507/Rento/wiki |
 
-- `Source File/rento/src/main/java`
-- `Source File/rento/src/main/resources`
-
-### 3) Configure dependencies
-
-This project keeps JARs locally inside:
-
-- `Source File/jars/`
-
-Add all required JARs from that folder to your IDE project libraries, including:
-
-- JavaFX JARs
-- MongoDB driver JARs
-- `jbcrypt-0.4.jar`
-- `itextpdf-5.5.13.3.jar`
-- `controlsfx-11.1.2.jar`
-- `gson-2.10.1.jar`
-- `slf4j-api` + `slf4j-simple`
-
-### 4) Start MongoDB
-
-Make sure MongoDB is running locally:
-
-- Connection string used by the app: `mongodb://localhost:27017`
-- Database name: `rento_db`
-
-### 5) Run the application
-
-Run the main class:
-
-- `com.rento.app.RentoApplication`
-
-On first launch, the app seeds demo users and vehicles if collections are empty.
-
-## Demo Accounts (seeded automatically)
-
-- `user@rento.local`
-- `driver@rento.local`
-- `supplier@rento.local`
-- `admin@rento.local`
-
-Default password for seeded users: `Rento@123`
-
-## Wiki
-
-- Project Wiki: https://github.com/hariharasudhan-29507/Rento/wiki
-
-## Documentation
-
-- [Software Requirements Specification](./Documentation/SRS%20VRBS.pdf)
-- [ER/Project Specification](./Documentation/SPECIFICATION%20VRBS.pdf)
-- [UML Diagrams Folder](./UML%20diagrams/README.md)
+---
 
 ## Team
 
 | Name | Email |
-|------|-------|
+|---|---|
 | Hariharasudhan A | sudanayyappan_bcs28@mepcoeng.ac.in |
 | Hari Prasad V | santhiselvan74_bcs28@mepcoeng.ac.in |
 | Muhammed Yousuf M | yousufilyas86bcs28@mepcoeng.ac.in |
